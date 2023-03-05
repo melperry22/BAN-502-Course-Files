@@ -1,0 +1,127 @@
+---
+title: "MBissonnette Phase 1 Project"
+author: "me"
+date: "2023-02-22"
+output:
+  word_document: default
+  html_document: default
+---
+Needed libraries  
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(dplyr)
+library(GGally) #ggcorr and ggpairs
+library(ggcorrplot) #correlation plot alternative
+library(glmnet) #for Lasso, ridge, and elastic net models 
+library(gridExtra) #create grids of plots
+library(car) #for the VIF function
+library(MASS) #access to forward and backward selection algorithms
+library(leaps) #best subset selection
+library(lmtest) 
+library(splines) #for nonlinear fitting
+library(mice) #package for imputation
+library(VIM) #visualizing missingness
+library(naniar) #visualizing missingness
+library(skimr) #alternative way to view dataset summaries
+library(UpSetR) #visualizing missingness
+```
+
+
+Read-in the dataset
+```{R}
+amesstudent = read_csv("ames_student-1.csv",show_col_types = FALSE)
+```
+
+Structure and summary. 
+```{r}
+str(amesstudent)
+summary(amesstudent)
+glimpse(amesstudent)
+skim(amesstudent)
+```
+Select some important variables.   
+```{r}
+amesstudent2 = amesstudent %>% dplyr::select("Neighborhood", "Bldg_Type", "House_Style", "Overall_Qual",  "Year_Built", "Year_Remod_Add", "Total_Bsmt_SF", "Full_Bath", "Bedroom_AbvGr", "Fireplaces", "Garage_Type", "Garage_Cars", "Above_Median")
+```
+
+Structure and summary. 
+```{r}
+str(amesstudent2)
+summary(amesstudent2)
+glimpse(amesstudent2)
+skim(amesstudent2)
+```
+
+```{r}
+amesstudent2 = amesstudent2 %>% mutate(across(where(is.character),as_factor))
+```
+Structure and summary. 
+```{r}
+str(amesstudent2)
+summary(amesstudent2)
+glimpse(amesstudent2)
+skim(amesstudent2)
+```
+
+Simple view of missingess. As you can see, no missing data.
+```{r}
+gg_miss_var(amesstudent2)
+```
+
+### Data Exploration
+Begin exploring the data by looking at a plot of our response variable only (choose a histogram for a single quantitative variable)  
+
+```{r}
+ggplot(amesstudent2, aes(x=Above_Median)) + geom_bar() + theme_bw()
+```
+Next we look at correlation. This is a logical step since almost all of our variables are quantitative.Year_Built has highest correlation
+
+Our Y (response) variable in this dataset is "Above_Median".  Let's look at ggpairs plot for visualization and correlation. There is a strong correlation between Year_Remod_Add and Above_Median 
+```{r}
+ggpairs(amesstudent2,cardinality_threshold = 28,upper = list(continuous=wrap("cor", size=2.0)),lower = list(combo="count"))
+```
+Alternatively:  Year_Built, Year_Remod_Add, and Total_Bmst_SF all appear to impact Above_Median.
+```{r}
+p1 = ggplot(amesstudent2, aes(x=Neighborhood,y=Above_Median)) + geom_point(alpha = 0.1) #changing alpha is helpful when many points may overlap
+p2 = ggplot(amesstudent2, aes(x=Bldg_Type,y=Above_Median)) + geom_boxplot()
+p3 = ggplot(amesstudent2, aes(x=House_Style,y=Above_Median)) + geom_boxplot()
+p4 = ggplot(amesstudent2, aes(x=Overall_Qual,y=Above_Median)) + geom_boxplot()
+p5 = ggplot(amesstudent2, aes(x=Year_Built,y=Above_Median)) + geom_boxplot()
+p6 = ggplot(amesstudent2, aes(x=Year_Remod_Add,y=Above_Median)) + geom_boxplot()
+p7 = ggplot(amesstudent2, aes(x=Total_Bsmt_SF,y=Above_Median)) + geom_boxplot()
+p8 = ggplot(amesstudent2, aes(x=Full_Bath,y=Above_Median)) + geom_boxplot()
+p9 = ggplot(amesstudent2, aes(x=Bedroom_AbvGr,y=Above_Median)) + geom_boxplot()
+p10 = ggplot(amesstudent2, aes(x=Fireplaces,y=Above_Median)) + geom_boxplot()
+p11 = ggplot(amesstudent2, aes(x=Garage_Type,y=Above_Median)) + geom_boxplot()
+p12 = ggplot(amesstudent2, aes(x=Garage_Cars,y=Above_Median)) + geom_boxplot()
+grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,ncol=2)
+```
+##Create a table to look at correlation between Neighborhood and Above_Median. Can see there is a correlation between value of home and neighborhood.
+```{r}
+amesstudent3<- table(amesstudent2$Neighborhood, amesstudent2$Above_Median)
+  amesstudent3
+```
+
+Closer look at "Year_Built" and "Above_Median".  This shows that the newer the home, the above_median is higher.
+```{r}
+ggplot(amesstudent2, aes(x=Year_Built,y=Above_Median)) + geom_boxplot() + theme_bw()
+ggplot(amesstudent2, aes(x=Year_Built,y=Above_Median)) + geom_boxplot() + 
+  geom_jitter() + theme_bw()
+```
+
+Closer look at "Year_Remod_Add" and "Above_Median".  This shows that the newer the remodel, the above_median is higher.
+```{r}
+ggplot(amesstudent2, aes(x=Year_Remod_Add,y=Above_Median)) + geom_boxplot() + theme_bw()
+ggplot(amesstudent2, aes(x=Year_Remod_Add,y=Above_Median)) + geom_boxplot() + 
+  geom_jitter() + theme_bw()
+```
+
+Closer look at "Total_Bsmt_SF" and "Above_Median".  This shows that the more basement square footage, the above_median is higher.
+```{r}
+ggplot(amesstudent2, aes(x=Total_Bsmt_SF,y=Above_Median)) + geom_boxplot() + theme_bw()
+ggplot(amesstudent2, aes(x=Total_Bsmt_SF,y=Above_Median)) + geom_boxplot() + 
+  geom_jitter() + theme_bw()
+```
+
+##As seen above, Above_Median is highly correlated to Neighborhood, Year_Built, Year_Remod_Add, and Total_Bsmt_SF. 
